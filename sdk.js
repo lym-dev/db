@@ -15,6 +15,17 @@ function getID() {
   return uuid;
 }
 
+// Helper function to validate email format using regex
+function validateEmail(email) {
+  const regex = /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,6}$/;
+  return regex.test(email);
+}
+
+// Helper function to validate password (more than 6 characters)
+function validatePassword(password) {
+  return password && password.length > 6;
+}
+
 class AppDB {
   constructor(workerUrl, developerKey) {
     this.workerUrl = workerUrl;
@@ -50,49 +61,14 @@ class AppDB {
         return response.json();
       })
       .then((data) => {
-        if (!data.developerKeyValid) {
-          // Check if developer key validation failed in the response
+        // Skip developer key validation for SETDEV method
+        if (method !== 'SETDEV' && !data.developerKeyValid) {
           throw new Error('Developer key not found');
         }
         return data;
       })
       .catch((error) => {
         console.error('Error in sendRequest:', error);
-        throw error;
-      });
-  }
-
-  // Set authentication method
-  setAuth() {
-    const key = getID();
-    localStorage.setItem('userUuid', key);
-    return this.sendRequest('SETAUTH', key)
-      .then((response) => {
-        console.log('setAuth response:', response);
-        return response;
-      })
-      .catch((error) => {
-        console.error('Error in setAuth method:', error);
-        throw error;
-      });
-  }
-  
-  // Remove authentication method
-  removeAuth() {
-    const key = localStorage.getItem('userUuid'); // Retrieve user UUID from localStorage
-    if (!key) {
-      return Promise.reject(new Error('User is not authenticated.'));
-    }
-  
-    localStorage.removeItem('userUuid'); // Remove the UUID from localStorage
-  
-    return this.sendRequest('REMOVEAUTH', key) // Use the correct method for removing authentication
-      .then((response) => {
-        console.log('removeAuth response:', response);
-        return response;
-      })
-      .catch((error) => {
-        console.error('Error in removeAuth method:', error);
         throw error;
       });
   }
@@ -123,7 +99,47 @@ class AppDB {
     return this.sendRequest('POST', key, data);
   }
   
-  // Set method
+  // Create user method with validation
+  async createUser(email, password) {
+    if (!validateEmail(email)) {
+      return Promise.reject(new Error('Invalid email format.'));
+    }
+    if (!validatePassword(password)) {
+      return Promise.reject(new Error('Password must be more than 6 characters.'));
+    }
+
+    const key = getID();
+    const userData = { email, password, uuid: key }; // Prepare user data with UUID
+    return this.sendRequest('CREATEUSER', key, userData);
+  }
+
+  // SignIn method with validation
+  async signIn(email, password) {
+    if (!validateEmail(email)) {
+      return Promise.reject(new Error('Invalid email format.'));
+    }
+    if (!validatePassword(password)) {
+      return Promise.reject(new Error('Password must be more than 6 characters.'));
+    }
+
+    const key = localStorage.getItem('userUuid');
+    if (!key) {
+      return Promise.reject(new Error('User is not authenticated.'));
+    }
+    
+    return this.sendRequest('SIGNIN', key, { email, password });
+  }
+
+  // SignOut method
+  async signOut() {
+    const key = localStorage.getItem('userUuid');
+    if (!key) {
+      return Promise.reject(new Error('User is not authenticated.'));
+    }
+    return this.sendRequest('SIGNOUT', key);
+  }
+
+  // Set developer method
   async setDev(key, data) {
     if (!key || !data) {
       return Promise.reject(new Error('Key and data must be provided for set operation.'));
