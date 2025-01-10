@@ -90,7 +90,7 @@ function validateDeveloperKey(developerKey) {
   return openDB().then((db) => {
     return new Promise((resolve, reject) => {
       if (!developerKey) {
-        return reject(new Error('No Developer Key provided.'));
+        return reject(new Error('Developer key not provided.'));
       }
 
       const transaction = db.transaction('chatStore', 'readonly');
