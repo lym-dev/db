@@ -39,41 +39,40 @@ class AppDB {
 
   // Send requests to the service worker with developer key authentication
   sendRequest(method, key, data = null) {
-  let url = this.workerUrl;
-  if (key) url += `?key=${encodeURIComponent(key)}`;
-
-  const fetchOptions = {
-    method,
-    headers: {
-      'Content-Type': 'application/json',
-      'Developer-Key': this.developerKey, // Include developer key in headers
-    },
-    ...(method !== 'GET' && { body: JSON.stringify({ key, data }) }),
-  };
-
-  // If the method is 'SETDEV', we skip validating the developer key.
-  if (method === 'SETDEV') {
-    delete fetchOptions.headers['Developer-Key'];  // Remove the developer key from the headers to bypass validation
-  }
-
-  return fetch(url, fetchOptions)
-    .then((response) => {
-      if (!response.ok) {
-        return response.text().then((text) => {
-          throw new Error(`Request failed: ${text}`);
-        });
-      }
-      return response.json();
-    })
-    .then((data) => {
-      // Developer key validation is skipped for 'SETDEV', so we don't need this check here.
-      return data;
-    })
-    .catch((error) => {
-      console.error('Error in sendRequest:', error);
-      throw error;
-    });
-}
+    let url = this.workerUrl;
+    if (key) url += `?key=${encodeURIComponent(key)}`;
+  
+    const fetchOptions = {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        'Developer-Key': this.developerKey, // Include developer key in headers
+      },
+      ...(method !== 'GET' && { body: JSON.stringify({ key, data }) }),
+    };
+  
+    // If the method is 'SETDEV', we skip validating the developer key.
+    if (method === 'SETDEV') {
+      delete fetchOptions.headers['Developer-Key'];  // Remove the developer key from the headers to bypass validation
+    }
+  
+    return fetch(url, fetchOptions)
+      .then((response) => {
+        if (!response.ok) {
+          return response.text().then((text) => {
+            throw new Error(`Request failed: ${text}`);
+          });
+        }
+        return response.json();
+      })
+      .then((data) => {
+        // Developer key validation is skipped for 'SETDEV', so we don't need this check here.
+        return data;
+      })
+      .catch((error) => {
+        console.error('Error in sendRequest:', error);
+        throw error;
+      });
   }
 
   // Get authentication method
