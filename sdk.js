@@ -122,6 +122,14 @@ class AppDB {
     }
     return this.sendRequest('POST', key, data);
   }
+  
+  // Set method
+  async setDev(key, data) {
+    if (!key || !data) {
+      return Promise.reject(new Error('Key and data must be provided for set operation.'));
+    }
+    return this.sendRequest('SETDEV', key, data);
+  }
 
   // Get method
   get(key) {
