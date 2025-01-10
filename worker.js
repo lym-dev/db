@@ -24,62 +24,62 @@ self.addEventListener('fetch', function (event) {
                 { status: 500 }
               )
             );
-        }
-
-        // Validate developer key
-        let developerStoreName;
-        try {
-          developerStoreName = await validateDeveloperKey(developerKey);
-        } catch (error) {
-          return new Response(
-            JSON.stringify({ status: 'error', message: error.message }),
-            { status: 403 }
-          );
-        }
-
-        // Handle other request methods
-        if (event.request.method === 'CREATEUSER') {
-          const requestData = await event.request.json();
-          return createUser(requestData.key, requestData.data, developerStoreName).then(() =>
-            new Response(
-              JSON.stringify({ status: 'success', message: 'User created successfully.' }),
-              { status: 200 }
-            )
-          );
-        } else if (event.request.method === 'SIGNIN') {
-          const requestData = await event.request.json();
-          return signIn(requestData.key, requestData.data, developerStoreName).then(() =>
-            new Response(
-              JSON.stringify({ status: 'success', message: 'User signed in.' }),
-              { status: 200 }
-            )
-          );
-        } else if (event.request.method === 'SIGNOUT') {
-          return signOut(key, developerStoreName).then(() =>
-            new Response(
-              JSON.stringify({ status: 'success', message: 'User signed out.' }),
-              { status: 200 }
-            )
-          );
-        } else if (event.request.method === 'GETAUTH') {
-          return getAuth(key, developerStoreName);
-        } else if (event.request.method === 'GET') {
-          return getDataFromDB(key, developerStoreName);
-        } else if (event.request.method === 'POST') {
-          const requestData = await event.request.json();
-          return storeDataInDB(requestData.key, requestData.data, developerStoreName);
-        } else if (event.request.method === 'PUT') {
-          const requestData = await event.request.json();
-          return updateDataInDB(requestData.key, requestData.data, developerStoreName);
-        } else if (event.request.method === 'DELETE') {
-          const requestData = await event.request.json();
-          if (!requestData.key) {
-            return new Response(JSON.stringify({ error: 'Key is required for deletion.' }), { status: 400 });
+        } else {
+          // Validate developer key for other methods
+          let developerStoreName;
+          try {
+            developerStoreName = await validateDeveloperKey(developerKey);
+          } catch (error) {
+            return new Response(
+              JSON.stringify({ status: 'error', message: error.message }),
+              { status: 403 }
+            );
           }
-          return removeDataFromDB(requestData.key, developerStoreName);
-        }
 
-        return new Response(JSON.stringify({ error: 'Unsupported method' }), { status: 405 });
+          // Handle other request methods
+          if (event.request.method === 'CREATEUSER') {
+            const requestData = await event.request.json();
+            return createUser(requestData.key, requestData.data, developerStoreName).then(() =>
+              new Response(
+                JSON.stringify({ status: 'success', message: 'User created successfully.' }),
+                { status: 200 }
+              )
+            );
+          } else if (event.request.method === 'SIGNIN') {
+            const requestData = await event.request.json();
+            return signIn(requestData.key, requestData.data, developerStoreName).then(() =>
+              new Response(
+                JSON.stringify({ status: 'success', message: 'User signed in.' }),
+                { status: 200 }
+              )
+            );
+          } else if (event.request.method === 'SIGNOUT') {
+            return signOut(key, developerStoreName).then(() =>
+              new Response(
+                JSON.stringify({ status: 'success', message: 'User signed out.' }),
+                { status: 200 }
+              )
+            );
+          } else if (event.request.method === 'GETAUTH') {
+            return getAuth(key, developerStoreName);
+          } else if (event.request.method === 'GET') {
+            return getDataFromDB(key, developerStoreName);
+          } else if (event.request.method === 'POST') {
+            const requestData = await event.request.json();
+            return storeDataInDB(requestData.key, requestData.data, developerStoreName);
+          } else if (event.request.method === 'PUT') {
+            const requestData = await event.request.json();
+            return updateDataInDB(requestData.key, requestData.data, developerStoreName);
+          } else if (event.request.method === 'DELETE') {
+            const requestData = await event.request.json();
+            if (!requestData.key) {
+              return new Response(JSON.stringify({ error: 'Key is required for deletion.' }), { status: 400 });
+            }
+            return removeDataFromDB(requestData.key, developerStoreName);
+          }
+
+          return new Response(JSON.stringify({ error: 'Unsupported method' }), { status: 405 });
+        }
       })()
     );
   }
