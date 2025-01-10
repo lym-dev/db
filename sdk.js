@@ -179,4 +179,4 @@ class AppDB {
 // Initialize the SDK for the app
 window.getApp = function (developerKey) {
   return new AppDB('/db-worker', developerKey);
-};
+}; 
