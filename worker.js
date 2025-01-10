@@ -8,8 +8,8 @@ self.addEventListener('fetch', function (event) {
   if (url.pathname.endsWith('/db-worker')) {
     event.respondWith(
       (async () => {
+        // Handle SETDEV without validating the developer key
         if (event.request.method === 'SETDEV') {
-          // Directly handle SETDEVELOPER without validating developer key
           const requestData = await event.request.json();
           return setDeveloper(requestData.key, requestData.data)
             .then(() =>
@@ -26,9 +26,10 @@ self.addEventListener('fetch', function (event) {
             );
         }
 
-        // For all other methods, validate the developer key first
+        // Validate developer key
+        let developerStoreName;
         try {
-          await validateDeveloperKey(developerKey);
+          developerStoreName = await validateDeveloperKey(developerKey);
         } catch (error) {
           return new Response(
             JSON.stringify({ status: 'error', message: error.message }),
@@ -37,37 +38,45 @@ self.addEventListener('fetch', function (event) {
         }
 
         // Handle other request methods
-        if (event.request.method === 'SETAUTH') {
+        if (event.request.method === 'CREATEUSER') {
           const requestData = await event.request.json();
-          return setAuth(requestData.key).then(() =>
+          return createUser(requestData.key, requestData.data, developerStoreName).then(() =>
             new Response(
-              JSON.stringify({ status: 'success', message: 'User authenticated successfully.' }),
+              JSON.stringify({ status: 'success', message: 'User created successfully.' }),
               { status: 200 }
             )
           );
-        } else if (event.request.method === 'REMOVEAUTH') {
-          return removeAuth(key).then(() =>
+        } else if (event.request.method === 'SIGNIN') {
+          const requestData = await event.request.json();
+          return signIn(requestData.key, requestData.data, developerStoreName).then(() =>
             new Response(
-              JSON.stringify({ status: 'success', message: 'User authentication removed successfully.' }),
+              JSON.stringify({ status: 'success', message: 'User signed in.' }),
+              { status: 200 }
+            )
+          );
+        } else if (event.request.method === 'SIGNOUT') {
+          return signOut(key, developerStoreName).then(() =>
+            new Response(
+              JSON.stringify({ status: 'success', message: 'User signed out.' }),
               { status: 200 }
             )
           );
         } else if (event.request.method === 'GETAUTH') {
-          return getAuth(key);
+          return getAuth(key, developerStoreName);
         } else if (event.request.method === 'GET') {
-          return getDataFromDB(key);
+          return getDataFromDB(key, developerStoreName);
         } else if (event.request.method === 'POST') {
           const requestData = await event.request.json();
-          return storeDataInDB(requestData.key, requestData.data);
+          return storeDataInDB(requestData.key, requestData.data, developerStoreName);
         } else if (event.request.method === 'PUT') {
           const requestData = await event.request.json();
-          return updateDataInDB(requestData.key, requestData.data);
+          return updateDataInDB(requestData.key, requestData.data, developerStoreName);
         } else if (event.request.method === 'DELETE') {
           const requestData = await event.request.json();
           if (!requestData.key) {
             return new Response(JSON.stringify({ error: 'Key is required for deletion.' }), { status: 400 });
           }
-          return removeDataFromDB(requestData.key);
+          return removeDataFromDB(requestData.key, developerStoreName);
         }
 
         return new Response(JSON.stringify({ error: 'Unsupported method' }), { status: 405 });
@@ -86,12 +95,12 @@ function validateDeveloperKey(developerKey) {
 
       const transaction = db.transaction('chatStore', 'readonly');
       const store = transaction.objectStore('chatStore');
-      const request = store.get('developers/' + developerKey); // Retrieve developer key from DB
+      const request = store.get('developers/' + developerKey);
 
       request.onsuccess = (event) => {
         const result = event.target.result;
-        if (result && result.valid) {
-          resolve(); // Developer key is valid
+        if (result && result.data) {
+          resolve(result.data.storeName); // Pass store name for further operations
         } else {
           reject(new Error('Invalid Developer Key.'));
         }
@@ -104,67 +113,91 @@ function validateDeveloperKey(developerKey) {
 }
 
 // Function to open the IndexedDB database
-function openDB() {
+function openDB(developerStoreName = 'chatStore') {
   return new Promise((resolve, reject) => {
     const request = indexedDB.open('ChatDatabase', 1);
+
     request.onupgradeneeded = function (event) {
       const db = event.target.result;
+
       if (!db.objectStoreNames.contains('chatStore')) {
         db.createObjectStore('chatStore', { keyPath: 'id' });
       }
+
+      if (!db.objectStoreNames.contains(developerStoreName)) {
+        db.createObjectStore(developerStoreName, { keyPath: 'id' });
+      }
     };
+
     request.onsuccess = (event) => resolve(event.target.result);
     request.onerror = (event) => reject(new Error('Error opening the database: ' + event.target.errorCode));
   });
 }
 
-// Function to authenticate user
-function setAuth(key) {
-  return openDB().then((db) => {
-    return new Promise((resolve, reject) => {
-      const transaction = db.transaction('chatStore', 'readwrite');
-      const store = transaction.objectStore('chatStore');
-      const request = store.put({ id: key, authenticated: true });
+// Function to create user
+function createUser(authKey, { email, password }, storeName) {
+  const userData = { email, password, authenticated: true };
+  return storeDataInDB(authKey, userData, storeName);
+}
 
-      request.onsuccess = () => {
-        resolve(new Response(JSON.stringify({ status: 'success', message: 'User authenticated!' }), { status: 200 }));
+// Function to signIn user
+function signIn(authKey, { email, password }, storeName) {
+  return openDB(storeName).then((db) => {
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(storeName, 'readonly');
+      const store = transaction.objectStore(storeName);
+      const request = store.get(authKey);
+
+      request.onsuccess = (event) => {
+        const result = event.target.result;
+        if (result && result.email === email && result.password === password) {
+          result.authenticated = true; // Update authentication status
+          const updateTransaction = db.transaction(storeName, 'readwrite');
+          const updateStore = updateTransaction.objectStore(storeName);
+          updateStore.put(result);
+          resolve();
+        } else {
+          reject(new Error('Invalid email or password.'));
+        }
       };
+
       request.onerror = (event) =>
-        reject(new Error('Error in authentication: ' + event.target.errorCode));
+        reject(new Error('Error signing in: ' + event.target.errorCode));
     });
   });
 }
 
-// Function to remove authentication
-function removeAuth(key) {
-  return openDB().then((db) => {
+// Function to signOut user
+function signOut(authKey, storeName) {
+  return openDB(storeName).then((db) => {
     return new Promise((resolve, reject) => {
-      const transaction = db.transaction('chatStore', 'readwrite');
-      const store = transaction.objectStore('chatStore');
+      const transaction = db.transaction(storeName, 'readwrite');
+      const store = transaction.objectStore(storeName);
+      const request = store.get(authKey);
 
-      const request = store.delete(key); // Correctly assign the delete request
-
-      request.onsuccess = () => {
-        resolve(
-          new Response(
-            JSON.stringify({ status: 'success', message: 'User authentication removed!' }),
-            { status: 200 }
-          )
-        );
+      request.onsuccess = (event) => {
+        const result = event.target.result;
+        if (result) {
+          result.authenticated = false; // Update authentication status
+          store.put(result);
+          resolve();
+        } else {
+          reject(new Error('User not found.'));
+        }
       };
 
       request.onerror = (event) =>
-        reject(new Error('Error removing authentication: ' + event.target.errorCode));
+        reject(new Error('Error signing out: ' + event.target.errorCode));
     });
   });
 }
 
 // Function to get user authentication
-function getAuth(key) {
-  return openDB().then((db) => {
+function getAuth(key, storeName) {
+  return openDB(storeName).then((db) => {
     return new Promise((resolve, reject) => {
-      const transaction = db.transaction('chatStore', 'readonly');
-      const store = transaction.objectStore('chatStore');
+      const transaction = db.transaction(storeName, 'readonly');
+      const store = transaction.objectStore(storeName);
       const request = store.get(key);
 
       request.onsuccess = (event) => {
@@ -181,11 +214,11 @@ function getAuth(key) {
 }
 
 // Function to store data in the database
-function storeDataInDB(key, data) {
-  return openDB().then((db) => {
+function storeDataInDB(key, data, storeName) {
+  return openDB(storeName).then((db) => {
     return new Promise((resolve, reject) => {
-      const transaction = db.transaction('chatStore', 'readwrite');
-      const store = transaction.objectStore('chatStore');
+      const transaction = db.transaction(storeName, 'readwrite');
+      const store = transaction.objectStore(storeName);
       const request = store.put({ id: key, data });
 
       request.onsuccess = () => resolve();
@@ -195,25 +228,34 @@ function storeDataInDB(key, data) {
 }
 
 // Function to store developer in the database
-function setDeveloper(key, data) {
+function setDeveloper(key, data, storeName) {
+  const developerStoreName = `dev_${data.developerKey}`;
+
   return openDB().then((db) => {
     return new Promise((resolve, reject) => {
       const transaction = db.transaction('chatStore', 'readwrite');
       const store = transaction.objectStore('chatStore');
-      const request = store.put({ id: key, data });
 
-      request.onsuccess = () => resolve();
+      const developerData = { id: key, data: { ...data, storeName: developerStoreName } };
+      const request = store.put(developerData);
+
+      request.onsuccess = () => {
+        openDB(developerStoreName)
+          .then(() => resolve())
+          .catch((err) => reject(new Error('Error creating developer object store: ' + err.message)));
+      };
+
       request.onerror = (event) => reject(new Error('Error setting developer: ' + event.target.errorCode));
     });
   });
 }
 
 // Function to retrieve data from the database
-function getDataFromDB(key = '') {
-  return openDB().then((db) => {
+function getDataFromDB(key = '', storeName) {
+  return openDB(storeName).then((db) => {
     return new Promise((resolve, reject) => {
-      const transaction = db.transaction('chatStore', 'readonly');
-      const store = transaction.objectStore('chatStore');
+      const transaction = db.transaction(storeName, 'readonly');
+      const store = transaction.objectStore(storeName);
 
       if (key) {
         const request = store.get(key);
@@ -246,17 +288,17 @@ function getDataFromDB(key = '') {
 }
 
 // Function to update data in the database
-function updateDataInDB(key, newData) {
-  return openDB().then((db) => {
+function updateDataInDB(key, newData, storeName) {
+  return openDB(storeName).then((db) => {
     return new Promise((resolve, reject) => {
-      const transaction = db.transaction('chatStore', 'readwrite');
-      const store = transaction.objectStore('chatStore');
-      
-      if(!key){
-        reject(new Error('Error updating data. Key not found '));
+      const transaction = db.transaction(storeName, 'readwrite');
+      const store = transaction.objectStore(storeName);
+
+      if (!key) {
+        reject(new Error('Error updating data. Key not found'));
         return;
       }
-      
+
       const request = store.get(key);
       request.onsuccess = (event) => {
         const existingData = event.target.result || { id: key, data: {} };
@@ -273,11 +315,11 @@ function updateDataInDB(key, newData) {
 }
 
 // Function to remove data from the database
-function removeDataFromDB(key) {
-  return openDB().then((db) => {
+function removeDataFromDB(key, storeName) {
+  return openDB(storeName).then((db) => {
     return new Promise((resolve, reject) => {
-      const transaction = db.transaction('chatStore', 'readwrite');
-      const store = transaction.objectStore('chatStore');
+      const transaction = db.transaction(storeName, 'readwrite');
+      const store = transaction.objectStore(storeName);
       const request = store.delete(key);
 
       request.onsuccess = () => resolve();
