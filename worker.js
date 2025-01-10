@@ -8,77 +8,90 @@ self.addEventListener('fetch', function (event) {
   if (url.pathname.endsWith('/db-worker')) {
     event.respondWith(
       (async () => {
-        // Handle SETDEV without validating the developer key
-        if (event.request.method === 'SETDEV') {
-          const requestData = await event.request.json();
-          return setDeveloper(requestData.key, requestData.data)
-            .then(() =>
-              new Response(
-                JSON.stringify({ status: 'success', message: 'Developer key and data stored successfully.' }),
-                { status: 200 }
-              )
-            )
-            .catch((error) =>
-              new Response(
-                JSON.stringify({ status: 'error', message: error.message }),
-                { status: 500 }
-              )
-            );
-        } else {
-          // Validate developer key for other methods
-          let developerStoreName;
-          try {
-            developerStoreName = await validateDeveloperKey(developerKey);
-          } catch (error) {
-            return new Response(
-              JSON.stringify({ status: 'error', message: error.message }),
-              { status: 403 }
-            );
-          }
+        const method = event.request.method;
 
-          // Handle other request methods
-          if (event.request.method === 'CREATEUSER') {
-            const requestData = await event.request.json();
-            return createUser(requestData.key, requestData.data, developerStoreName).then(() =>
-              new Response(
-                JSON.stringify({ status: 'success', message: 'User created successfully.' }),
-                { status: 200 }
+        // Validate developer key for all methods except SETDEV
+        let developerStoreName;
+        if (method !== 'POST') {
+          return new Response(JSON.stringify({ error: 'Unsupported HTTP method' }), { status: 405 });
+        }
+
+        try {
+          developerStoreName = await validateDeveloperKey(developerKey);
+        } catch (error) {
+          return new Response(
+            JSON.stringify({ status: 'error', message: error.message }),
+            { status: 403 }
+          );
+        }
+
+        // Parse request data
+        const requestData = await event.request.json();
+        const action = requestData.action;
+
+        switch (action) {
+          case 'SETDEV':
+            return setDeveloper(requestData.key, requestData.data)
+              .then(() =>
+                new Response(
+                  JSON.stringify({ status: 'success', message: 'Developer key and data stored successfully.' }),
+                  { status: 200 }
+                )
               )
-            );
-          } else if (event.request.method === 'SIGNIN') {
-            const requestData = await event.request.json();
-            return signIn(requestData.key, requestData.data, developerStoreName).then(() =>
-              new Response(
-                JSON.stringify({ status: 'success', message: 'User signed in.' }),
-                { status: 200 }
-              )
-            );
-          } else if (event.request.method === 'SIGNOUT') {
-            return signOut(key, developerStoreName).then(() =>
-              new Response(
-                JSON.stringify({ status: 'success', message: 'User signed out.' }),
-                { status: 200 }
-              )
-            );
-          } else if (event.request.method === 'GETAUTH') {
+              .catch((error) =>
+                new Response(
+                  JSON.stringify({ status: 'error', message: error.message }),
+                  { status: 500 }
+                )
+              );
+
+          case 'CREATEUSER':
+            return createUser(requestData.key, requestData.data, developerStoreName)
+              .then(() =>
+                new Response(
+                  JSON.stringify({ status: 'success', message: 'User created successfully.' }),
+                  { status: 200 }
+                )
+              );
+
+          case 'SIGNIN':
+            return signIn(requestData.key, requestData.data, developerStoreName)
+              .then(() =>
+                new Response(
+                  JSON.stringify({ status: 'success', message: 'User signed in.' }),
+                  { status: 200 }
+                )
+              );
+
+          case 'SIGNOUT':
+            return signOut(key, developerStoreName)
+              .then(() =>
+                new Response(
+                  JSON.stringify({ status: 'success', message: 'User signed out.' }),
+                  { status: 200 }
+                )
+              );
+
+          case 'GETAUTH':
             return getAuth(key, developerStoreName);
-          } else if (event.request.method === 'GET') {
-            return getDataFromDB(key, developerStoreName);
-          } else if (event.request.method === 'POST') {
-            const requestData = await event.request.json();
+
+          case 'GET':
+            return getDataFromDB(requestData.key, developerStoreName);
+
+          case 'POST':
             return storeDataInDB(requestData.key, requestData.data, developerStoreName);
-          } else if (event.request.method === 'PUT') {
-            const requestData = await event.request.json();
+
+          case 'PUT':
             return updateDataInDB(requestData.key, requestData.data, developerStoreName);
-          } else if (event.request.method === 'DELETE') {
-            const requestData = await event.request.json();
+
+          case 'DELETE':
             if (!requestData.key) {
               return new Response(JSON.stringify({ error: 'Key is required for deletion.' }), { status: 400 });
             }
             return removeDataFromDB(requestData.key, developerStoreName);
-          }
 
-          return new Response(JSON.stringify({ error: 'Unsupported method' }), { status: 405 });
+          default:
+            return new Response(JSON.stringify({ error: 'Unsupported action' }), { status: 400 });
         }
       })()
     );
@@ -90,7 +103,7 @@ function validateDeveloperKey(developerKey) {
   return openDB().then((db) => {
     return new Promise((resolve, reject) => {
       if (!developerKey) {
-        return reject(new Error('Developer key not provided.'));
+        return reject(new Error('No Developer Key provided.'));
       }
 
       const transaction = db.transaction('chatStore', 'readonly');
