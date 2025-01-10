@@ -17,13 +17,13 @@ function getID() {
 
 // Helper function to validate email format using regex
 function validateEmail(email) {
-  const regex = /^[a-zA-Z0-9._-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,6}$/;
+  const regex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,6}$/;
   return regex.test(email);
 }
 
-// Helper function to validate password (more than 6 characters)
+// Helper function to validate password (at least 6 characters)
 function validatePassword(password) {
-  return password && password.length > 6;
+  return password && password.length >= 6; // Change to >= 6 if that's the requirement
 }
 
 class AppDB {
@@ -37,7 +37,7 @@ class AppDB {
     console.log(`Sending ${method} request to ${url} with data:`, data);
   }
 
-  // Send requests to the service worker with developer key authentication
+  // Method to handle sending requests with key validation
   sendRequest(method, key, data = null) {
     let url = this.workerUrl;
     if (key) url += `?key=${encodeURIComponent(key)}`;
@@ -46,14 +46,14 @@ class AppDB {
       method,
       headers: {
         'Content-Type': 'application/json',
-        'Developer-Key': this.developerKey, // Include developer key in headers
+        'Developer-Key': this.developerKey,
       },
       ...(method !== 'GET' && { body: JSON.stringify({ key, data }) }),
     };
   
-    // If the method is 'SETDEV', we skip validating the developer key.
+    // Skip the developer key validation for 'SETDEV' method
     if (method === 'SETDEV') {
-      delete fetchOptions.headers['Developer-Key'];  // Remove the developer key from the headers to bypass validation
+      delete fetchOptions.headers['Developer-Key'];
     }
   
     return fetch(url, fetchOptions)
@@ -65,10 +65,7 @@ class AppDB {
         }
         return response.json();
       })
-      .then((data) => {
-        // Developer key validation is skipped for 'SETDEV', so we don't need this check here.
-        return data;
-      })
+      .then((data) => data)
       .catch((error) => {
         console.error('Error in sendRequest:', error);
         throw error;
@@ -179,4 +176,4 @@ class AppDB {
 // Initialize the SDK for the app
 window.getApp = function (developerKey) {
   return new AppDB('/db-worker', developerKey);
-}; 
+};
