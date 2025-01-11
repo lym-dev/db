@@ -165,5 +165,5 @@ class AppDB {
 
 // Initialize the SDK for the app
 window.getApp = function (developerKey) {
-  return new AppDB('https://lym-dev.github.io/db/db-worker', developerKey);
+  return new AppDB('https://lym-dev.github.io/db/worker.js/db-worker', developerKey);
 };
