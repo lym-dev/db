@@ -5,7 +5,7 @@ self.addEventListener('fetch', function (event) {
   const key = url.searchParams.get('key'); // Extract the key from the query parameter
   const developerKey = event.request.headers.get('Developer-Key'); // Get the developer key from headers
 
-  if (url.pathname.endsWith('/db-worker')) {
+  if (url.pathname.endsWith('https://lym-dev.github.io/db/worker.js')) {
     event.respondWith(
       (async () => {
         const method = event.request.method;
