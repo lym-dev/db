@@ -23,7 +23,7 @@ function validateEmail(email) {
 
 // Helper function to validate password (at least 6 characters)
 function validatePassword(password) {
-  return password && password.length >= 6;
+  return password && password.length >= 6; // Change to >= 6 if that's the requirement
 }
 
 class AppDB {
@@ -33,35 +33,30 @@ class AppDB {
   }
 
   // Helper function to log request details.
-  logRequest(action, data) {
-    console.log(`Sending POST request with action: ${action} and data:`, data);
+  logRequest(method, url, data) {
+    console.log(`Sending ${method} request to ${url} with data:`, data);
   }
 
-  // General method to send POST requests
-  sendRequest(action, key = null, data = null) {
-    const body = {
-      action,
-      key,
-      data,
-    };
-
+  // Method to handle sending requests with key validation
+  sendRequest(action, key, data = null) {
+    let url = this.workerUrl;
+    if (key) url += `?key=${encodeURIComponent(key)}`;
+  
     const fetchOptions = {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'Developer-Key': this.developerKey,
       },
-      body: JSON.stringify(body),
+      ...(method !== 'GET' && { body: JSON.stringify({ action, key, data }) }),
     };
-
-    // Skip developer key validation for 'SETDEV' action
+  
+    // Skip the developer key validation for 'SETDEV' method
     if (action === 'SETDEV') {
       delete fetchOptions.headers['Developer-Key'];
     }
-
-    this.logRequest(action, body);
-
-    return fetch(this.workerUrl, fetchOptions)
+  
+    return fetch(url, fetchOptions)
       .then((response) => {
         if (!response.ok) {
           return response.text().then((text) => {
@@ -70,6 +65,7 @@ class AppDB {
         }
         return response.json();
       })
+      .then((data) => data)
       .catch((error) => {
         console.error('Error in sendRequest:', error);
         throw error;
@@ -82,19 +78,28 @@ class AppDB {
     if (!key) {
       return Promise.reject(new Error('User not authenticated'));
     }
-    return this.sendRequest('GETAUTH', key);
+
+    return this.sendRequest('GETAUTH', key)
+      .then((response) => {
+        console.log('getAuth response:', response);
+        return response;
+      })
+      .catch((error) => {
+        console.error('Error in getAuth method:', error);
+        throw error;
+      });
   }
 
   // Set method
-  set(key, data) {
+  async set(key, data) {
     if (!key || !data) {
       return Promise.reject(new Error('Key and data must be provided for set operation.'));
     }
     return this.sendRequest('SET', key, data);
   }
-
+  
   // Create user method with validation
-  createUser(email, password) {
+  async createUser(email, password) {
     if (!validateEmail(email)) {
       return Promise.reject(new Error('Invalid email format.'));
     }
@@ -103,12 +108,12 @@ class AppDB {
     }
 
     const key = getID();
-    const userData = { email, password, uuid: key };
+    const userData = { email, password, uuid: key }; // Prepare user data with UUID
     return this.sendRequest('CREATEUSER', key, userData);
   }
 
   // SignIn method with validation
-  signIn(email, password) {
+  async signIn(email, password) {
     if (!validateEmail(email)) {
       return Promise.reject(new Error('Invalid email format.'));
     }
@@ -120,12 +125,12 @@ class AppDB {
     if (!key) {
       return Promise.reject(new Error('User is not authenticated.'));
     }
-
+    
     return this.sendRequest('SIGNIN', key, { email, password });
   }
 
   // SignOut method
-  signOut() {
+  async signOut() {
     const key = localStorage.getItem('userUuid');
     if (!key) {
       return Promise.reject(new Error('User is not authenticated.'));
@@ -134,7 +139,7 @@ class AppDB {
   }
 
   // Set developer method
-  setDev(key, data) {
+  async setDev(key, data) {
     if (!key || !data) {
       return Promise.reject(new Error('Key and data must be provided for set operation.'));
     }
@@ -143,7 +148,12 @@ class AppDB {
 
   // Get method
   get(key) {
-    return this.sendRequest('GET', key);
+    return this.sendRequest('GET', key)
+      .then((response) => (response.message === 'No data found' ? null : response))
+      .catch((error) => {
+        console.error('Error in get method:', error);
+        throw error;
+      });
   }
 
   // Update method
@@ -151,7 +161,7 @@ class AppDB {
     if (!key) {
       return Promise.reject(new Error('Key must be provided for update operation.'));
     }
-    return this.sendRequest('UPDATE', key, data);
+    return this.sendRequest('PUT', key, data);
   }
 
   // Remove method
@@ -159,11 +169,11 @@ class AppDB {
     if (!key) {
       return Promise.reject(new Error('Key must be provided for remove operation.'));
     }
-    return this.sendRequest('REMOVE', key);
+    return this.sendRequest('DELETE', key);
   }
 }
 
 // Initialize the SDK for the app
 window.getApp = function (developerKey) {
-  return new AppDB('https://lym-dev.github.io/db/db-worker', developerKey);
+  return new AppDB('/db-worker', developerKey);
 };
