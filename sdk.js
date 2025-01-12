@@ -48,7 +48,7 @@ class AppDB {
         'Content-Type': 'application/json',
         'Developer-Key': this.developerKey,
       },
-      ...(method !== 'GET' && { body: JSON.stringify({ action, key, data }) }),
+      ...(action !== 'GET' && { body: JSON.stringify({ action, key, data }) }),
     };
   
     // Skip the developer key validation for 'SETDEV' method
